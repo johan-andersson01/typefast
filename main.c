@@ -1,52 +1,28 @@
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <pthread.h>
-#include <unistd.h>
-#include <curses.h>
-#include <signal.h>
-#define SIGNAL(x) pthread_cond_signal(x)
-#define LOCK(x) pthread_mutex_lock(x)
-#define UNLOCK(x) pthread_mutex_unlock(x)
-#define DEFAULT_FILE "dictionary.txt"
-#define HELP_EXIT (33)
-#define END_EXIT (0)
-#define L_BORDER (col/10)
-void error(char* msg, char* arg);
-void score_tracker();
-void print_help();
-char** read_dict(size_t* nbr_of_lines, char* filename);
-void input();
-void print_words();
-void free_exit(int sig);
+#include "typefast.h"
 int row, col;
 int cur_row = 0;
-int max_line_len= 0;
-
-// global vars:
-// wordlist (printed words)
-// dictionary (not printed yet)
-// score
-// input_queue
-// mutex for wordlist (accessed by score_tracker and print_words
-//
+int max_line_len;
+struct timespec start, finish;
 char** dict; // unprinted words
 size_t dict_entries = 0;
 char** wordlist;
 volatile size_t wordlist_entries = 0;
 size_t malloced = 0;
 int score = 0;
+unsigned int hits = 0;
+unsigned int misses = 0;
 unsigned short speed = 9;
 volatile unsigned short game_over = 0;
-char next_input[100];
+char* next_input;
 
-pthread_mutex_t input_lock     = PTHREAD_MUTEX_INITIALIZER;
-pthread_mutex_t wordlist_lock  = PTHREAD_MUTEX_INITIALIZER;
-pthread_cond_t input_cond      = PTHREAD_COND_INITIALIZER;
+MUT input_lock     = PTHREAD_MUTEX_INITIALIZER;
+MUT wordlist_lock  = PTHREAD_MUTEX_INITIALIZER;
+COND input_cond    = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
+    signal(SIGINT, free_exit);
     if (argc < 2) {
-        dict = read_dict(&dict_entries, DEFAULT_FILE);
+        dict = read_dict(&dict_entries, DEF_FILE);
     } else if (argc > 2) {
         error("Too many arguments. Use -h for help.", NULL);
     } else if (*argv[1] == '-' && *(argv[1]+1) == 'h') {
@@ -54,6 +30,7 @@ int main(int argc, char* argv[]) {
     } else {
         dict = read_dict(&dict_entries,  argv[1]);
     }
+    next_input = malloc((max_line_len+1)*sizeof(char));
     initscr();
     start_color();
     init_pair(1, COLOR_WHITE, COLOR_RED);
@@ -62,13 +39,12 @@ int main(int argc, char* argv[]) {
     noecho();
     curs_set(0);
     getmaxyx(stdscr, row, col);
-    char msg[] = ("Welcome to Type Fast...\n");
-    mvprintw(row/2, (col-strlen(msg))/2, "%s", msg);
+    mvprintw(row/2, (col-strlen(WELCOME))/2, "%s", WELCOME);
     refresh();
     wordlist = malloc(dict_entries*sizeof(char*));
-    signal(SIGINT, free_exit);
     // init threads
     pthread_t threads[3]; 
+    clock_gettime(CLOCK_MONOTONIC, &start);
     pthread_create(&threads[0], NULL, print_words, NULL);
     pthread_create(&threads[1], NULL, score_tracker, NULL);
     pthread_create(&threads[2], NULL, input, NULL);
@@ -79,9 +55,16 @@ int main(int argc, char* argv[]) {
 }
 
 void free_exit(int sig) {
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+    float elapsed = (finish.tv_sec - start.tv_sec);
+    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
     clear();
-    if (sig == END_EXIT) {
-        mvprintw(row/2, (col-strlen("You reached the end of the game"))/2,"You reached the end of the game");
+    if (sig == END_EXIT || sig == SIGINT) {
+        mvprintw(MID_Y,   MID_X(END_MSG), END_MSG);
+        mvprintw(MID_Y+1, MID_X(TIM_MSG), TIM_MSG, 2, elapsed);
+        mvprintw(MID_Y+2, MID_X(ACC_MSG), ACC_MSG, 2, ((float) hits)/(hits+misses));
+        mvprintw(MID_Y+3, MID_X(HIT_MSG), HIT_MSG, hits);
+        mvprintw(MID_Y+4, MID_X(MIS_MSG), MIS_MSG, misses);
     }
     for (size_t i = 0; i < malloced; i++) {
         free(dict[i]);
@@ -92,10 +75,12 @@ void free_exit(int sig) {
         wordlist[i] = NULL;
     }
     refresh();
-    sleep(2);
+    sleep(3);
     endwin();
+    free(next_input);
     free(dict);
     free(wordlist);
+    next_input = NULL;
     dict = NULL;
     wordlist = NULL;
     exit(1);
@@ -176,10 +161,10 @@ void input(void* param) {
         char c = getch();
         if (c != '\n') {
             next[pos++] = c;
-            mvprintw(row-1, L_BORDER, "%s", next);
+            mvprintw(TOP_Y + 1, BOT_X, "%s", next);
             refresh();
         } else {
-            next[pos++] = 0;
+            next[pos++] = '\0';
             LOCK(&input_lock);
             strcpy(next_input, next);
             SIGNAL(&input_cond);
@@ -192,22 +177,37 @@ void input(void* param) {
 
 void print_words(void* param) {
     for (size_t i = 0; i < dict_entries; i++) {
-        sleep(10-speed);
+        cur_row = i % TOP_Y + 1;
+        sleep(1);
         LOCK(&wordlist_lock);
+        if (i > cur_row) {
+            for (size_t k = 0; k < i; k++) {
+                if (k % TOP_Y + 1 == cur_row) {
+                    free(wordlist[k]);
+                    wordlist[k] = NULL;
+                }
+            }
+        }
         wordlist[wordlist_entries] = malloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(wordlist[wordlist_entries++], dict[i]);
         UNLOCK(&wordlist_lock);
-        mvprintw(++cur_row, L_BORDER, dict[i]);
+        erase_row(cur_row, NULL, 0);
+        mvprintw(cur_row, BOT_X, dict[i]);
         refresh();
     }
+    game_over = 1;
+    SIGNAL(&input_cond);
 }
 
 void score_tracker(void* param) {
     char next[max_line_len];
     volatile unsigned int matches = 0;
-    while (matches != dict_entries) {
+    while ( !game_over  && matches != dict_entries) {
         LOCK(&input_lock);
         pthread_cond_wait(&input_cond, &input_lock);
+        if (game_over) {
+            break;
+        }
         strcpy(next, next_input);
         UNLOCK(&input_lock);
         short match = 0;
@@ -218,7 +218,7 @@ void score_tracker(void* param) {
             if (wordlist[i] != NULL && strcmp(next, wordlist[i]) == 0) {
                 match = 1;
                 matches++;
-                match_row = i+1;
+                match_row = i % TOP_Y +1;
                 line_len = strlen(wordlist[i]);
                 free(wordlist[i]);
                 wordlist[i] = NULL;
@@ -228,14 +228,16 @@ void score_tracker(void* param) {
         UNLOCK(&wordlist_lock);
 
         if (match) {
+                hits++;
                 attron(COLOR_PAIR(2));
-                mvprintw(match_row, L_BORDER + max_line_len , next);
-                mvprintw(row - 2, col-(strlen("Score:    ")), "Score: %d", ++score);
+                mvprintw(match_row, BOT_X + max_line_len , next);
+                mvprintw(TOP_Y+1, TOP_X("Score:XXXXX"), "Score: %d", ++score);
                 attroff(COLOR_PAIR(2));
         } else {
+                misses++;
                 attron(COLOR_PAIR(1));
-                mvprintw(row/2+1, col/2-(strlen(next)), next);
-                mvprintw(row - 2, col-(strlen("Score:    ")), "Score: %d", --score);
+                mvprintw(TOP_Y + 1, TOP_X("Score:XXXXX") - strlen(next) - 2, next);
+                mvprintw(TOP_Y + 1, TOP_X("Score:XXXXX"), "Score: %d", --score);
                 attroff(COLOR_PAIR(1));
         }
     }
