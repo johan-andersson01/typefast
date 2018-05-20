@@ -7,7 +7,7 @@ char** dict; // unprinted words
 size_t dict_entries = 0;
 char** wordlist;
 volatile size_t wordlist_entries = 0;
-size_t malloced = 0;
+size_t malloced_lines = 0;
 int score = 0;
 unsigned int hits = 0;
 unsigned int misses = 0;
@@ -26,11 +26,11 @@ int main(int argc, char* argv[]) {
     } else if (argc > 2) {
         error("Too many arguments. Use -h for help.", NULL);
     } else if (*argv[1] == '-' && *(argv[1]+1) == 'h') {
-        print_help();
+        free_exit(HELP_EXIT);
     } else {
         dict = read_dict(&dict_entries,  argv[1]);
     }
-    next_input = malloc((max_line_len+1)*sizeof(char));
+    next_input = xmalloc((max_line_len+1)*sizeof(char));
     initscr();
     start_color();
     init_pair(1, COLOR_WHITE, COLOR_RED);
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     getmaxyx(stdscr, row, col);
     mvprintw(row/2, (col-strlen(WELCOME))/2, "%s", WELCOME);
     refresh();
-    wordlist = malloc(dict_entries*sizeof(char*));
+    wordlist = xmalloc(dict_entries*sizeof(char*));
     // init threads
     pthread_t threads[3]; 
     clock_gettime(CLOCK_MONOTONIC, &start);
@@ -55,18 +55,31 @@ int main(int argc, char* argv[]) {
 }
 
 void free_exit(int sig) {
-    clock_gettime(CLOCK_MONOTONIC, &finish);
-    float elapsed = (finish.tv_sec - start.tv_sec);
-    elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
-    clear();
+    game_over = 1;
     if (sig == END_EXIT || sig == SIGINT) {
+        clock_gettime(CLOCK_MONOTONIC, &finish);
+        float elapsed = (finish.tv_sec - start.tv_sec);
+        elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+        float accuracy = 0;
+        if (hits+misses > 0) {
+            accuracy = ((float) hits)/(hits+misses);
+        }
+        clear();
         mvprintw(MID_Y,   MID_X(END_MSG), END_MSG);
-        mvprintw(MID_Y+1, MID_X(TIM_MSG), TIM_MSG, 2, elapsed);
-        mvprintw(MID_Y+2, MID_X(ACC_MSG), ACC_MSG, 2, ((float) hits)/(hits+misses));
-        mvprintw(MID_Y+3, MID_X(HIT_MSG), HIT_MSG, hits);
+        mvprintw(MID_Y+1, MID_X(TOT_MSG), TOT_MSG, wordlist_entries);
+        mvprintw(MID_Y+2, MID_X(TIM_MSG), TIM_MSG, 2, elapsed);
+        mvprintw(MID_Y+3, MID_X(ACC_MSG), ACC_MSG, 2, accuracy);
         mvprintw(MID_Y+4, MID_X(MIS_MSG), MIS_MSG, misses);
+        mvprintw(MID_Y+5, MID_X(HIT_MSG), HIT_MSG, hits);
+        mvprintw(MID_Y+6, MID_X(KEY_MSG), KEY_MSG);
+        refresh();
+        getch();
+        endwin();
+    } else if (sig == HELP_EXIT) {
+        puts("You typed -h to get help!");
+        exit(1);
     }
-    for (size_t i = 0; i < malloced; i++) {
+    for (size_t i = 0; i < malloced_lines; i++) {
         free(dict[i]);
         dict[i] = NULL;
     }
@@ -74,9 +87,6 @@ void free_exit(int sig) {
         free(wordlist[i]);
         wordlist[i] = NULL;
     }
-    refresh();
-    sleep(3);
-    endwin();
     free(next_input);
     free(dict);
     free(wordlist);
@@ -86,12 +96,19 @@ void free_exit(int sig) {
     exit(1);
 }
 
-
+void* xmalloc(size_t bytes) {
+    void* p = malloc(bytes);
+    if (p != NULL) {
+        return p;
+    }
+    error("xmalloc failed", NULL);
+    exit(1);
+}
 
 char** read_dict(size_t* nbr_of_lines, char* filename) {
     FILE *f;
-    malloced = 100;
-    char** lines = malloc(malloced*sizeof(char*));
+    malloced_lines = 100;
+    char** lines = xmalloc(malloced_lines*sizeof(char*));
     f = fopen(filename, "r");
     if (f == NULL) {
         error("Couldn't open dictionary file:", filename);
@@ -101,7 +118,7 @@ char** read_dict(size_t* nbr_of_lines, char* filename) {
     {
         int line_pos = 0;
         int malloced_length= 2;
-        lines[line] = malloc(malloced_length * sizeof(char));
+        lines[line] = xmalloc(malloced_length * sizeof(char));
         char ch = ' ';
         while (ch != '\n' && !feof(f)) {
             ch = fgetc(f);
@@ -111,12 +128,12 @@ char** read_dict(size_t* nbr_of_lines, char* filename) {
             }
             lines[line][line_pos++] = ch;
         }
-        lines[line][line_pos-1] = '\0';
+        lines[line][line_pos-1] = '\0'; // strip \n
         if (!feof(f)) {
             *nbr_of_lines = ++line;
-            while (line >= malloced) {
-                malloced *= 2;
-                lines = (char **)realloc(lines, malloced);
+            while (line >= malloced_lines) {
+                malloced_lines *= 2;
+                lines = (char **)realloc(lines, malloced_lines);
             }
         }
         if (line_pos > max_line_len) {
@@ -126,13 +143,7 @@ char** read_dict(size_t* nbr_of_lines, char* filename) {
     return lines;
 }
 
-void print_help() {
-    printf("Welcome to Type Fast!\n");
-    free_exit(HELP_EXIT);
-}
-
 void error(char* msg, char* arg) {
-    printf("Boop beep! ");
     if (arg == NULL) {
         puts(msg);
     } else {
@@ -188,10 +199,15 @@ void print_words(void* param) {
                 }
             }
         }
-        wordlist[wordlist_entries] = malloc((1+strlen(dict[i]))*sizeof(char));
+        wordlist[wordlist_entries] = xmalloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(wordlist[wordlist_entries++], dict[i]);
+        /* free(dict[i]); */
+        /* dict[i] = NULL; */
         UNLOCK(&wordlist_lock);
         erase_row(cur_row, NULL, 0);
+        if (game_over) {
+            return;
+        }
         mvprintw(cur_row, BOT_X, dict[i]);
         refresh();
     }

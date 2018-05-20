@@ -15,9 +15,11 @@
 #define WELCOME "Welcome to Type Fast"
 #define END_MSG "You reached the end of the game"
 #define TIM_MSG "Time: %.*f seconds"
+#define TOT_MSG "Number of words: %zd"
 #define ACC_MSG "Accuracy: %.*f"
 #define HIT_MSG "Hits: %d"
 #define MIS_MSG "Misses: %d\n"
+#define KEY_MSG "Press any key to exit"
 // layout constants
 #define TOP_X (col - col/10)
 #define TOP_X(msg) (col - strlen(msg))
@@ -41,3 +43,4 @@ char** read_dict(size_t* nbr_of_lines, char* filename);
 void input();
 void print_words();
 void free_exit(int sig);
+void* xmalloc(size_t bytes);
