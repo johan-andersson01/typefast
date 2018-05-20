@@ -3,11 +3,15 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <curses.h>
 #include <signal.h>
+#define SIGNAL(x) pthread_cond_signal(x)
+#define LOCK(x) pthread_mutex_lock(x)
+#define UNLOCK(x) pthread_mutex_unlock(x)
 #define DEFAULT_FILE "dictionary.txt"
 #define HELP_EXIT (33)
 #define END_EXIT (0)
-
+#define L_BORDER (col/10)
 void error(char* msg, char* arg);
 void score_tracker();
 void print_help();
@@ -15,6 +19,9 @@ char** read_dict(size_t* nbr_of_lines, char* filename);
 void input();
 void print_words();
 void free_exit(int sig);
+int row, col;
+int cur_row = 0;
+int max_line_len= 0;
 
 // global vars:
 // wordlist (printed words)
@@ -26,14 +33,13 @@ void free_exit(int sig);
 char** dict; // unprinted words
 size_t dict_entries = 0;
 char** wordlist;
-size_t wordlist_entries = 0;
+volatile size_t wordlist_entries = 0;
 size_t malloced = 0;
 int score = 0;
 unsigned short speed = 9;
 volatile unsigned short game_over = 0;
 char next_input[100];
 
-pthread_mutex_t game_over_lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t input_lock     = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t wordlist_lock  = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t input_cond      = PTHREAD_COND_INITIALIZER;
@@ -48,6 +54,17 @@ int main(int argc, char* argv[]) {
     } else {
         dict = read_dict(&dict_entries,  argv[1]);
     }
+    initscr();
+    start_color();
+    init_pair(1, COLOR_WHITE, COLOR_RED);
+    init_pair(2, COLOR_WHITE, COLOR_GREEN);
+    cbreak();
+    noecho();
+    curs_set(0);
+    getmaxyx(stdscr, row, col);
+    char msg[] = ("Welcome to Type Fast...\n");
+    mvprintw(row/2, (col-strlen(msg))/2, "%s", msg);
+    refresh();
     wordlist = malloc(dict_entries*sizeof(char*));
     signal(SIGINT, free_exit);
     // init threads
@@ -55,18 +72,16 @@ int main(int argc, char* argv[]) {
     pthread_create(&threads[0], NULL, print_words, NULL);
     pthread_create(&threads[1], NULL, score_tracker, NULL);
     pthread_create(&threads[2], NULL, input, NULL);
-
-    if (pthread_join(threads[0], NULL)) {
-        fprintf(stderr, "Error joining thread %d\n", 0);
+    if (pthread_join(threads[1], NULL)) {
+        fprintf(stderr, "Error joining thread %d\n", 1);
     }
     free_exit(END_EXIT);
 }
 
 void free_exit(int sig) {
+    clear();
     if (sig == END_EXIT) {
-        printf("You reached the end of the game\nYour score is: %d\n", score);
-    } else if (sig == SIGINT) {
-        printf("Good bye. \nYour score is: %d\n", score);
+        mvprintw(row/2, (col-strlen("You reached the end of the game"))/2,"You reached the end of the game");
     }
     for (size_t i = 0; i < malloced; i++) {
         free(dict[i]);
@@ -76,6 +91,9 @@ void free_exit(int sig) {
         free(wordlist[i]);
         wordlist[i] = NULL;
     }
+    refresh();
+    sleep(2);
+    endwin();
     free(dict);
     free(wordlist);
     dict = NULL;
@@ -97,24 +115,27 @@ char** read_dict(size_t* nbr_of_lines, char* filename) {
     while (!feof(f))
     {
         int line_pos = 0;
-        int max_line_length = 2;
-        lines[line] = malloc(max_line_length * sizeof(char));
+        int malloced_length= 2;
+        lines[line] = malloc(malloced_length * sizeof(char));
         char ch = ' ';
         while (ch != '\n' && !feof(f)) {
             ch = fgetc(f);
-            while (line_pos >= max_line_length - 2) {
-                max_line_length *= 2;
-                lines[line] = (char *)realloc(lines[line], max_line_length);
+            while (line_pos >= malloced_length - 2) {
+                malloced_length *= 2;
+                lines[line] = (char *)realloc(lines[line],malloced_length);
             }
             lines[line][line_pos++] = ch;
         }
-        lines[line][line_pos] = '\0';
+        lines[line][line_pos-1] = '\0';
         if (!feof(f)) {
             *nbr_of_lines = ++line;
             while (line >= malloced) {
                 malloced *= 2;
                 lines = (char **)realloc(lines, malloced);
             }
+        }
+        if (line_pos > max_line_len) {
+            max_line_len = line_pos;
         }
     }
     return lines;
@@ -136,59 +157,87 @@ void error(char* msg, char* arg) {
     exit(1);
 }
 
-void input(void* param) {
-    char next[100];
-    while (fgets(next, 100, stdin)) {
-        lock(&input_lock);
-        strcpy(next_input, next);
-        pthread_cond_signal(&input_cond);
-        unlock(&input_lock);
-        printf("you entered: %s\n", next);
+void erase_row(int row, char* str, short strlen) {
+    int prev_x, prev_y;
+    getyx(stdscr,prev_y,prev_x);
+    move(row,0);
+    clrtoeol();
+    refresh();
+    for (short i = 0; i < strlen; i++) {
+        str[i] = 0;
     }
+    move(prev_y, prev_x);
 }
 
-void lock(void* mutex) {
-    pthread_mutex_lock(mutex);
-}
-
-void unlock(void* mutex) {
-    pthread_mutex_unlock(mutex);
+void input(void* param) {
+    char next[max_line_len];
+    unsigned short pos = 0;
+    while (!game_over) {
+        char c = getch();
+        if (c != '\n') {
+            next[pos++] = c;
+            mvprintw(row-1, L_BORDER, "%s", next);
+            refresh();
+        } else {
+            next[pos++] = 0;
+            LOCK(&input_lock);
+            strcpy(next_input, next);
+            SIGNAL(&input_cond);
+            UNLOCK(&input_lock);
+            erase_row(row-1, next, pos);
+            pos = 0;
+        }
+    }
 }
 
 void print_words(void* param) {
     for (size_t i = 0; i < dict_entries; i++) {
         sleep(10-speed);
-        puts(dict[i]);
-        fflush(stdout);
-        lock(&wordlist_lock);
+        LOCK(&wordlist_lock);
         wordlist[wordlist_entries] = malloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(wordlist[wordlist_entries++], dict[i]);
-        unlock(&wordlist_lock);
+        UNLOCK(&wordlist_lock);
+        mvprintw(++cur_row, L_BORDER, dict[i]);
+        refresh();
     }
-    game_over = 1;
 }
 
 void score_tracker(void* param) {
-    char next[100];
-    while (!game_over) {
-        lock(&input_lock);
+    char next[max_line_len];
+    volatile unsigned int matches = 0;
+    while (matches != dict_entries) {
+        LOCK(&input_lock);
         pthread_cond_wait(&input_cond, &input_lock);
-        printf("in s_t: next_input = %s\n", next_input);
         strcpy(next, next_input);
-        unlock(&input_lock);
+        UNLOCK(&input_lock);
         short match = 0;
-        lock(&wordlist_lock);
-        printf("in s_t: wordlist_entries = %zd\n", wordlist_entries);
+        short match_row = 0;
+        short line_len = 0;
+        LOCK(&wordlist_lock);
         for (size_t i = 0; i < wordlist_entries; i++) {
             if (wordlist[i] != NULL && strcmp(next, wordlist[i]) == 0) {
                 match = 1;
+                matches++;
+                match_row = i+1;
+                line_len = strlen(wordlist[i]);
                 free(wordlist[i]);
                 wordlist[i] = NULL;
                 break;
             }
         }
-        unlock(&wordlist_lock);
-        if (match) score++;
-        else score--;
+        UNLOCK(&wordlist_lock);
+
+        if (match) {
+                attron(COLOR_PAIR(2));
+                mvprintw(match_row, L_BORDER + max_line_len , next);
+                mvprintw(row - 2, col-(strlen("Score:    ")), "Score: %d", ++score);
+                attroff(COLOR_PAIR(2));
+        } else {
+                attron(COLOR_PAIR(1));
+                mvprintw(row/2+1, col/2-(strlen(next)), next);
+                mvprintw(row - 2, col-(strlen("Score:    ")), "Score: %d", --score);
+                attroff(COLOR_PAIR(1));
+        }
     }
+    game_over = 1;
 }
