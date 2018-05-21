@@ -201,9 +201,9 @@ void print_words(void* param) {
         }
         wordlist[wordlist_entries] = xmalloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(wordlist[wordlist_entries++], dict[i]);
-        /* free(dict[i]); */
-        /* dict[i] = NULL; */
         UNLOCK(&wordlist_lock);
+        free(dict[i]);
+        dict[i] = NULL;
         erase_row(cur_row, NULL, 0);
         if (game_over) {
             return;

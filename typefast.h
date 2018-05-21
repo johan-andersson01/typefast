@@ -21,6 +21,23 @@
 #define MIS_MSG "Misses: %d\n"
 #define KEY_MSG "Press any key to exit"
 // layout constants
+//
+// BOT_X----------MID_X-----------------> TOP_X
+// BOT_Y
+//   |
+//   |
+//   |
+//   |
+//   |
+// MID_Y
+//   |
+//   |
+//   |
+//   |
+//   |
+//   v
+// TOP_Y
+//
 #define TOP_X (col - col/10)
 #define TOP_X(msg) (col - strlen(msg))
 #define MID_X(msg) (col-strlen(msg))/2
