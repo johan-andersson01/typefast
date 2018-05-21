@@ -73,16 +73,20 @@ void free_exit(int sig) {
         float elapsed = (finish.tv_sec - start.tv_sec);
         elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
         float accuracy = 0;
+        float hitratio = 0;
+        float missratio = 0;
         if (hits+misses > 0) {
             accuracy = ((float) hits)/(hits+misses);
+            hitratio = ((float) hits)/dict_printed_entries;
+            missratio = ((float) misses)/dict_printed_entries;
         }
         clear();
         mvprintw(MID_Y,   MID_XA(END_MSG), END_MSG);
         mvprintw(MID_Y+1, MID_XA(TIM_MSG), TIM_MSG, 2, elapsed);
         mvprintw(MID_Y+2, MID_XA(TOT_MSG), TOT_MSG, dict_printed_entries);
         mvprintw(MID_Y+3, MID_XA(ACC_MSG), ACC_MSG, 2, accuracy);
-        mvprintw(MID_Y+4, MID_XA(MIS_MSG), MIS_MSG, misses);
-        mvprintw(MID_Y+5, MID_XA(HIT_MSG), HIT_MSG, hits);
+        mvprintw(MID_Y+4, MID_XA(MIS_MSG), MIS_MSG, misses, 2, missratio);
+        mvprintw(MID_Y+5, MID_XA(HIT_MSG), HIT_MSG, hits, 2, hitratio);
         mvprintw(MID_Y+6, MID_XA(KEY_MSG), KEY_MSG);
         refresh();
         getch();
@@ -184,7 +188,9 @@ void* input(void* param) {
     while (!game_over) {
         char c = getch();
         if (c != '\n') {
-            next[pos++] = c;
+            if (pos < max_line_len) {
+                next[pos++] = c;
+            }
             mvprintw(TOP_Y + 1, BOT_X, "%s", next);
             refresh();
         } else {
@@ -203,7 +209,7 @@ void* input(void* param) {
 void* print_words(void* param) {
     for (size_t i = 0; i < dict_entries; i++) {
         cur_row = i % TOP_Y + 1;
-        sleep(1);
+        usleep(speed*100*MS);
         LOCK(&dict_printed_lock);
         if (i > cur_row) {
             for (size_t k = 0; k < i; k++) {

@@ -18,8 +18,8 @@
 #define TIM_MSG  "Time: %.*f seconds"
 #define TOT_MSG  "Number of words: %zd"
 #define ACC_MSG  "Accuracy: %.*f"
-#define HIT_MSG  "Hits: %d"
-#define MIS_MSG  "Misses: %d\n"
+#define HIT_MSG  "Hits: %d (%.*f)"
+#define MIS_MSG  "Misses: %d (%.*f)"
 #define KEY_MSG  "Press any key twice to exit"
 // layout constants
 //
@@ -45,7 +45,8 @@
 #define TOP_Y       (rows-2)
 #define MID_Y       (rows/2)
 #define BOT_Y       (1)
-// function macros
+// macros
+#define MS        (1000)
 #define SIGNAL(x) pthread_cond_signal(x)
 #define LOCK(x)   pthread_mutex_lock(x)
 #define UNLOCK(x) pthread_mutex_unlock(x)
