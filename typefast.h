@@ -55,6 +55,7 @@
 #define GREEN     (COLOR_PAIR(2))
 // declarations
 void   init_ncurses();
+void   parse_flags(int argc, char* argv[]);
 void   error(char* msg, char* arg);
 void   free_exit(int sig);
 void*  score_tracker();

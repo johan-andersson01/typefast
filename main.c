@@ -21,7 +21,8 @@ COND input_flag    = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
-    parse_flags();
+    parse_flags(argc, argv);
+    init_ncurses();
     next_input = xmalloc((max_line_len+1)*sizeof(char));
     dict_printed = xmalloc(dict_entries*sizeof(char*));
     pthread_t threads[3];
@@ -92,11 +93,9 @@ void free_exit(int sig) {
     }
     for (size_t i = 0; i < malloced_lines; i++) {
         free(dict[i]);
-        dict[i] = NULL;
     }
     for (size_t i = 0; i < dict_printed_entries; i++) {
         free(dict_printed[i]);
-        dict_printed[i] = NULL;
     }
     free(next_input);
     free(dict);
@@ -115,41 +114,45 @@ void* xmalloc(size_t bytes) {
     error("xmalloc failed", NULL);
 }
 
+void* xrealloc(void* p, size_t bytes) {
+    p = realloc(p, bytes);
+    if (p != NULL) {
+        return p;
+    }
+    error("xrealloc failed", NULL);
+}
+
 char** read_dict(size_t* nbr_of_lines, char* filename) {
     FILE *f;
-    malloced_lines = 100;
+    malloced_lines = 101;
     char** lines = xmalloc(malloced_lines*sizeof(char*));
     f = fopen(filename, "r");
     if (f == NULL) {
         error("Couldn't open dictionary file:", filename);
     }
     size_t line = 0;
+    max_line_len = 6;
     while (!feof(f))
     {
+        while (line >= malloced_lines) {
+            malloced_lines *= 2;
+            lines = xrealloc(lines, malloced_lines*sizeof(char*));
+        }
         int line_pos = 0;
-        int malloced_length= 2;
-        lines[line] = xmalloc(malloced_length * sizeof(char));
-        char ch = ' ';
+        lines[line] = xmalloc(max_line_len * sizeof(char));
+        char ch = 0;
         while (ch != '\n' && !feof(f)) {
             ch = fgetc(f);
-            while (line_pos >= malloced_length - 2) {
-                malloced_length *= 2;
-                lines[line] = (char *)realloc(lines[line],malloced_length);
+            while (line_pos >= max_line_len - 1) {
+                max_line_len *= 2;
+                lines[line] = xrealloc(lines[line],max_line_len*sizeof(char));
             }
             lines[line][line_pos++] = ch;
         }
-        lines[line][line_pos-1] = '\0'; // strip \n
-        if (!feof(f)) {
-            *nbr_of_lines = ++line;
-            while (line >= malloced_lines) {
-                malloced_lines *= 2;
-                lines = (char **)realloc(lines, malloced_lines);
-            }
-        }
-        if (line_pos > max_line_len) {
-            max_line_len = line_pos;
-        }
+        lines[line][line_pos-1] = '\0';
+        *nbr_of_lines = ++line;
     }
+    fclose(f);
     return lines;
 }
 
@@ -238,14 +241,12 @@ void* score_tracker(void* param) {
         UNLOCK(&input_lock);
         short match = 0;
         short match_row = 0;
-        short line_len = 0;
         LOCK(&dict_printed_lock);
         for (size_t i = 0; i < dict_printed_entries; i++) {
             if (dict_printed[i] != NULL && strcmp(next, dict_printed[i]) == 0) {
                 match = 1;
                 matches++;
                 match_row = i % TOP_Y +1;
-                line_len = strlen(dict_printed[i]);
                 free(dict_printed[i]);
                 dict_printed[i] = NULL;
                 break;
