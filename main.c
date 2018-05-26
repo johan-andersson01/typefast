@@ -189,10 +189,10 @@ void error(char* msg, char* arg) {
     exit(1);
 }
 
-void erase_row(int rows, char* str, short strlen) {
+void erase_row(int row, char* str, short strlen) {
     int prev_x, prev_y;
     getyx(stdscr,prev_y,prev_x);
-    move(rows,0);
+    move(row,0);
     clrtoeol();
     refresh();
     for (short i = 0; i < strlen; i++) {
@@ -282,7 +282,7 @@ void* score_tracker(void* param) {
         if (match) {
                 hits++;
                 attron(GREEN);
-                mvprintw(match_row, BOT_X + max_line_len , next);
+                mvprintw(match_row, BOT_X, next);
                 mvprintw(TOP_Y+1, TOP_XA("Score:XXXXX"), "Score: %d", ++score);
                 attroff(GREEN);
         } else {
