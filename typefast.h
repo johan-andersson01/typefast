@@ -21,6 +21,7 @@
 #define HIT_MSG  "Hits: %d (%.*f)"
 #define MIS_MSG  "Misses: %d (%.*f)"
 #define KEY_MSG  "Press any key twice to exit"
+#define HELP_MSG "Welcome to Type Fast!\n-h : shows list of options\n-s : enables shuffling of the dictionary\n-v <number> : sets the speed, where <number> may range from 0 to 10\n-f <filename> : specifies which dictionary to use. If this option isn't provided, the default 'dictionary.txt' will be chosen\n"
 // layout constants
 //
 // BOT_X/Y----------MID_X-----------------> TOP_X

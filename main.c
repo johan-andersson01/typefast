@@ -22,8 +22,7 @@ COND input_flag    = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
-    parse_flags(argc, argv);
-    dict = read_dict(&dict_entries,  argv[1]);
+    parse_options(argc, argv);
     init_ncurses();
     next_input = xmalloc((max_line_len+1)*sizeof(char));
     dict_printed = xmalloc(dict_entries*sizeof(char*));
@@ -38,14 +37,8 @@ int main(int argc, char* argv[]) {
     free_exit(END_EXIT);
 }
 
-void parse_flags(int argc, char* argv[]) {
-    // flags to add:
-    // speed -v
-    // shuffle dictionary -s
-    // dynamic speed -d (with argument to set accuracy)
-    if (argc < 2) {
-        dict = read_dict(&dict_entries, DEF_FILE);
-    }
+void parse_options(int argc, char* argv[]) {
+    short file_specified = 0;
     unsigned short i = 1;
     while (i < argc && *argv[i] == '-') {
         switch(*(argv[i]+1)) {
@@ -54,28 +47,27 @@ void parse_flags(int argc, char* argv[]) {
                 i++;
                 break;
             case 's':
-                i++;
-                printf("shuffle enabled\n");
                 shuffle = 1;
+                i++;
+                break;
             case 'v':
-                if (!isdigit(*(argv[i]+2))) {
-                    speed = *(argv[i]+2);
+                if (isdigit(*(argv[i+1]))) {
+                    speed = atoi(argv[++i]);
                 } else {
                     error("Bad input: invalid speed parameter", NULL);
                 }
-                printf("speed set to %d\n", speed);
                 i++;
                 break;
-            case 'd':
-                speed = *(argv[i]+2);
-                error("Bad input: invalid speed parameter", NULL);
-                printf("speed set to %d\n", speed);
-                i++;
+            case 'f':
+                file_specified = 1;
+                dict = read_dict(&dict_entries,argv[++i]);
                 break;
             default:
-                i++;
                 break;
         }
+    }
+    if (!file_specified) {
+        dict = read_dict(&dict_entries, DEF_FILE);
     }
 }
 
@@ -119,7 +111,7 @@ void free_exit(int sig) {
         getch();
         endwin();
     } else if (sig == HELP_EXIT) {
-        puts("You typed -h to get help!");
+        puts(HELP_MSG);
         exit(1);
     }
     for (size_t i = 0; i < malloced_lines; i++) {
