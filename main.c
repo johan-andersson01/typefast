@@ -12,6 +12,7 @@ int score = 0;
 unsigned int hits = 0;
 unsigned int misses = 0;
 unsigned short speed = 9;
+unsigned short shuffle = 0;
 volatile unsigned short game_over = 0;
 char* next_input;
 
@@ -22,6 +23,7 @@ COND input_flag    = PTHREAD_COND_INITIALIZER;
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
     parse_flags(argc, argv);
+    dict = read_dict(&dict_entries,  argv[1]);
     init_ncurses();
     next_input = xmalloc((max_line_len+1)*sizeof(char));
     dict_printed = xmalloc(dict_entries*sizeof(char*));
@@ -43,12 +45,37 @@ void parse_flags(int argc, char* argv[]) {
     // dynamic speed -d (with argument to set accuracy)
     if (argc < 2) {
         dict = read_dict(&dict_entries, DEF_FILE);
-    } else if (argc > 2) {
-        error("Too many arguments. Use -h for help.", NULL);
-    } else if (*argv[1] == '-' && *(argv[1]+1) == 'h') {
-        free_exit(HELP_EXIT);
-    } else {
-        dict = read_dict(&dict_entries,  argv[1]);
+    }
+    unsigned short i = 1;
+    while (i < argc && *argv[i] == '-') {
+        switch(*(argv[i]+1)) {
+            case 'h':
+                free_exit(HELP_EXIT);
+                i++;
+                break;
+            case 's':
+                i++;
+                printf("shuffle enabled\n");
+                shuffle = 1;
+            case 'v':
+                if (!isdigit(*(argv[i]+2))) {
+                    speed = *(argv[i]+2);
+                } else {
+                    error("Bad input: invalid speed parameter", NULL);
+                }
+                printf("speed set to %d\n", speed);
+                i++;
+                break;
+            case 'd':
+                speed = *(argv[i]+2);
+                error("Bad input: invalid speed parameter", NULL);
+                printf("speed set to %d\n", speed);
+                i++;
+                break;
+            default:
+                i++;
+                break;
+        }
     }
 }
 
