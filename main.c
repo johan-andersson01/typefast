@@ -79,7 +79,7 @@ void init_ncurses() {
     start_color();
     use_default_colors();
     init_pair(1, COLOR_WHITE, COLOR_RED);
-    init_pair(2, COLOR_WHITE, COLOR_GREEN);
+    init_pair(2, COLOR_WHITE, COLOR_BLUE);
     init_pair(3, COLOR_WHITE, COLOR_YELLOW);
     cbreak();
     noecho();
@@ -290,10 +290,10 @@ void* score_tracker(void* param) {
 
         if (match) {
                 hits++;
-                attron(GREEN);
+                attron(BLUE);
                 mvprintw(match_row, MIN_X, next);
                 mvprintw(MIN_Y-1, MAX_XA("Score:XXXXX"), "Score: %d", ++score);
-                attroff(GREEN);
+                attroff(BLUE);
         } else {
                 misses++;
                 attron(RED);
