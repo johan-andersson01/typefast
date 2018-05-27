@@ -53,6 +53,9 @@ void parse_options(int argc, char* argv[]) {
             case 'v':
                 if (isdigit(*(argv[i+1]))) {
                     speed = atoi(argv[++i]);
+                    if (speed < 1) {
+                        error("Bad input: minimum speed is 1\n", NULL);
+                    }
                 } else {
                     error("Bad input: invalid speed parameter", NULL);
                 }
@@ -77,6 +80,7 @@ void init_ncurses() {
     use_default_colors();
     init_pair(1, COLOR_WHITE, COLOR_RED);
     init_pair(2, COLOR_WHITE, COLOR_GREEN);
+    init_pair(3, COLOR_WHITE, COLOR_YELLOW);
     cbreak();
     noecho();
     curs_set(0);
@@ -210,7 +214,7 @@ void* input(void* param) {
             if (pos < max_line_len) {
                 next[pos++] = c;
             }
-            mvprintw(TOP_Y + 1, BOT_X, "%s", next);
+            mvprintw(MAX_Y + 1, MIN_X, "%s", next);
             refresh();
         } else {
             next[pos++] = '\0';
@@ -226,18 +230,22 @@ void* input(void* param) {
 }
 
 void* print_words(void* param) {
+    size_t printed = dict_entries;
     for (size_t i = 0; i < dict_entries; i++) {
-        cur_row = i % TOP_Y + 1;
+        cur_row = i % MAX_Y + 1;
         usleep(speed*100*MS);
         LOCK(&dict_printed_lock);
         if (i > cur_row) {
             for (size_t k = 0; k < i; k++) {
-                if (k % TOP_Y + 1 == cur_row) {
+                if (k % MAX_Y + 1 == cur_row) {
                     free(dict_printed[k]);
                     dict_printed[k] = NULL;
                 }
             }
         }
+        attron(YELLOW);
+        mvprintw(MIN_Y-1, MIN_X, "Words left: %d ", --printed);
+        attroff(YELLOW);
         dict_printed[dict_printed_entries] = xmalloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(dict_printed[dict_printed_entries++], dict[i]);
         UNLOCK(&dict_printed_lock);
@@ -245,7 +253,7 @@ void* print_words(void* param) {
         if (game_over) {
             return NULL;
         }
-        mvprintw(cur_row, BOT_X, dict[i]);
+        mvprintw(cur_row, MIN_X, dict[i]);
         refresh();
     }
     game_over = 1;
@@ -271,9 +279,10 @@ void* score_tracker(void* param) {
             if (dict_printed[i] != NULL && strcmp(next, dict_printed[i]) == 0) {
                 match = 1;
                 matches++;
-                match_row = i % TOP_Y +1;
+                match_row = i % MAX_Y +1;
                 free(dict_printed[i]);
                 dict_printed[i] = NULL;
+                dict_entries--;
                 break;
             }
         }
@@ -282,14 +291,14 @@ void* score_tracker(void* param) {
         if (match) {
                 hits++;
                 attron(GREEN);
-                mvprintw(match_row, BOT_X, next);
-                mvprintw(TOP_Y+1, TOP_XA("Score:XXXXX"), "Score: %d", ++score);
+                mvprintw(match_row, MIN_X, next);
+                mvprintw(MIN_Y-1, MAX_XA("Score:XXXXX"), "Score: %d", ++score);
                 attroff(GREEN);
         } else {
                 misses++;
                 attron(RED);
-                mvprintw(TOP_Y + 1, TOP_XA("Score:XXXXX") - strlen(next) - 2, next);
-                mvprintw(TOP_Y + 1, TOP_XA("Score:XXXXX"), "Score: %d", --score);
+                mvprintw(MAX_Y + 1, MAX_XA(next), next);
+                mvprintw(MIN_Y - 1, MAX_XA("Score:XXXXX"), "Score: %d", --score);
                 attroff((RED));
         }
     }

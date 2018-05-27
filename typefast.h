@@ -24,7 +24,7 @@
 #define HELP_MSG "Welcome to Type Fast!\n-h : shows list of options\n-s : enables shuffling of the dictionary\n-v <number> : sets the speed, where <number> may range from 0 to 10\n-f <filename> : specifies which dictionary to use. If this option isn't provided, the default 'dictionary.txt' will be chosen\n"
 // layout constants
 //
-// BOT_X/Y----------MID_X-----------------> TOP_X
+// MIN_X/Y----------MID_X-----------------> MAX_X
 //   |
 //   |
 //   |
@@ -37,15 +37,16 @@
 //   |
 //   |
 //   v
-// TOP_Y
+// MAX_Y
 //
-#define TOP_X       (cols - cols/10)
-#define TOP_XA(msg) (cols - strlen(msg))
+// *_XA adapts to the string length
+#define MAX_XA(msg) (cols - strlen(msg))
 #define MID_XA(msg) (cols-strlen(msg))/2
-#define BOT_X       (cols/10)
-#define TOP_Y       (rows-2)
+#define MAX_X       (cols - cols/10)
+#define MIN_X       (cols/10)
+#define MAX_Y       (rows-2)
 #define MID_Y       (rows/2)
-#define BOT_Y       (1)
+#define MIN_Y       (1)
 // macros
 #define MS        (1000)
 #define SIGNAL(x) pthread_cond_signal(x)
@@ -55,9 +56,10 @@
 #define COND      pthread_cond_t
 #define RED       (COLOR_PAIR(1))
 #define GREEN     (COLOR_PAIR(2))
+#define YELLOW    (COLOR_PAIR(3))
 // declarations
 void   init_ncurses();
-void   parse_flags(int argc, char* argv[]);
+void   parse_options(int argc, char* argv[]);
 void   error(char* msg, char* arg);
 void   free_exit(int sig);
 void*  score_tracker();
