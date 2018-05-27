@@ -85,7 +85,6 @@ void init_ncurses() {
     noecho();
     curs_set(0);
     getmaxyx(stdscr, rows, cols);
-    mvprintw(rows/2, (cols-strlen(WELCOME))/2, "%s", WELCOME);
     refresh();
 }
 
@@ -243,9 +242,17 @@ void* print_words(void* param) {
                 }
             }
         }
-        attron(YELLOW);
+        if (printed > dict_entries/10) {
+            attron(YELLOW);
+        } else {
+            attron(RED);
+        }
         mvprintw(MIN_Y-1, MIN_X, "Words left: %d ", --printed);
-        attroff(YELLOW);
+        if (printed > dict_entries/10) {
+            attroff(YELLOW);
+        } else {
+            attron(RED);
+        }
         dict_printed[dict_printed_entries] = xmalloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(dict_printed[dict_printed_entries++], dict[i]);
         UNLOCK(&dict_printed_lock);
