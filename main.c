@@ -204,18 +204,21 @@ void erase_row(int row, char* str, short strlen) {
     move(prev_y, prev_x);
 }
 
+void backspace() {
+    int prev_x, prev_y;
+    getyx(stdscr,prev_y,prev_x);
+    mvdelch(prev_y,prev_x-1);
+    move(prev_y, prev_x);
+    refresh();
+}
+
+
 void* input(void* param) {
     char next[max_line_len];
     unsigned short pos = 0;
     while (!game_over) {
         char c = getch();
-        if (c != '\n') {
-            if (pos < max_line_len) {
-                next[pos++] = c;
-            }
-            mvprintw(MAX_Y + 1, MIN_X, "%s", next);
-            refresh();
-        } else {
+        if (c == '\n') {
             next[pos++] = '\0';
             LOCK(&input_lock);
             strcpy(next_input, next);
@@ -223,6 +226,18 @@ void* input(void* param) {
             UNLOCK(&input_lock);
             erase_row(rows-1, next, pos);
             pos = 0;
+        } else if (c == KEY_BACKSPACE || c == KEY_DC || c == 127) {
+            if (pos > 0) {
+                pos--;
+            }
+            next[pos] = '\0';
+            erase();
+        } else {
+            if (pos < max_line_len) {
+                next[pos++] = c;
+            }
+            mvprintw(MAX_Y + 1, MIN_X, "%s", next);
+            refresh();
         }
     }
     return NULL;
