@@ -18,12 +18,11 @@ char* next_input;
 
 MUT input_lock          = PTHREAD_MUTEX_INITIALIZER;
 MUT dict_printed_lock   = PTHREAD_MUTEX_INITIALIZER;
-MUT cursor_lock         = PTHREAD_MUTEX_INITIALIZER;
 COND input_flag         = PTHREAD_COND_INITIALIZER;
-COND cursor_flag        = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
+    clock_gettime(CLOCK_MONOTONIC, &start); // used by shuffle
     parse_options(argc, argv);
     init_ncurses();
     next_input = xmalloc((max_line_len+1)*sizeof(char));
@@ -181,7 +180,24 @@ char** read_dict(size_t* nbr_of_lines, char* filename) {
         *nbr_of_lines = ++line;
     }
     fclose(f);
+    if (shuffle) {
+        shuffle_dict(lines, *nbr_of_lines);
+    }
     return lines;
+}
+
+void shuffle_dict(char** array, size_t n)
+{
+    if (n > 1) {
+        size_t i;
+        srand(start.tv_sec % INT_MAX);
+        for (i = 0; i < n - 1; i++) {
+          size_t j = rand() % (n - 1);
+          char* temp  = array[j];
+          array[j] = array[i];
+          array[i] = temp;
+        }
+    }
 }
 
 void error(char* msg, char* arg) {
@@ -196,14 +212,11 @@ void error(char* msg, char* arg) {
 
 void erase_row(int row, char* str, short strlen) {
     int prev_x, prev_y;
-    LOCK(&cursor_lock);
     getyx(stdscr,prev_y,prev_x);
     move(row,0);
     clrtoeol();
     refresh();
     move(prev_y, prev_x);
-    SIGNAL(&cursor_flag);
-    UNLOCK(&cursor_lock);
     for (short i = 0; i < strlen; i++) {
         str[i] = 0;
     }
@@ -220,7 +233,7 @@ void* input(void* param) {
     unsigned short pos = 0;
     while (!game_over) {
         char c = getch();
-        if (c == '\n') {
+        if (c == '\n' || c == ' ') {
             next[pos++] = '\0';
             LOCK(&input_lock);
             strcpy(next_input, next);
