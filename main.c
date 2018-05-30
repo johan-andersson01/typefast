@@ -16,9 +16,11 @@ unsigned short shuffle = 0;
 volatile unsigned short game_over = 0;
 char* next_input;
 
-MUT input_lock     = PTHREAD_MUTEX_INITIALIZER;
-MUT dict_printed_lock  = PTHREAD_MUTEX_INITIALIZER;
-COND input_flag    = PTHREAD_COND_INITIALIZER;
+MUT input_lock          = PTHREAD_MUTEX_INITIALIZER;
+MUT dict_printed_lock   = PTHREAD_MUTEX_INITIALIZER;
+MUT cursor_lock         = PTHREAD_MUTEX_INITIALIZER;
+COND input_flag         = PTHREAD_COND_INITIALIZER;
+COND cursor_flag        = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
@@ -103,6 +105,7 @@ void free_exit(int sig) {
             missratio = ((float) misses)/dict_printed_entries;
         }
         clear();
+        LOCK(&cursor_lock);
         mvprintw(MID_Y,   MID_XA(END_MSG), END_MSG);
         mvprintw(MID_Y+1, MID_XA(TIM_MSG), TIM_MSG, 2, elapsed);
         mvprintw(MID_Y+2, MID_XA(TOT_MSG), TOT_MSG, dict_printed_entries);
@@ -110,6 +113,8 @@ void free_exit(int sig) {
         mvprintw(MID_Y+4, MID_XA(MIS_MSG), MIS_MSG, misses, 2, missratio);
         mvprintw(MID_Y+5, MID_XA(HIT_MSG), HIT_MSG, hits, 2, hitratio);
         mvprintw(MID_Y+6, MID_XA(KEY_MSG), KEY_MSG);
+        SIGNAL(&cursor_flag);
+        UNLOCK(&cursor_lock);
         refresh();
         getch();
         endwin();
@@ -194,6 +199,7 @@ void error(char* msg, char* arg) {
 
 void erase_row(int row, char* str, short strlen) {
     int prev_x, prev_y;
+    LOCK(&cursor_lock);
     getyx(stdscr,prev_y,prev_x);
     move(row,0);
     clrtoeol();
@@ -202,12 +208,16 @@ void erase_row(int row, char* str, short strlen) {
         str[i] = 0;
     }
     move(prev_y, prev_x);
+    SIGNAL(&cursor_flag);
+    UNLOCK(&cursor_lock);
 }
 
-void backspace() {
+void backspace(short str_len) {
     int prev_x, prev_y;
-    getyx(stdscr,prev_y,prev_x);
-    mvdelch(prev_y,prev_x-1);
+    LOCK(&cursor_lock);
+    mvdelch(MAX_Y+1,MIN_X+str_len);
+    SIGNAL(&cursor_flag);
+    UNLOCK(&cursor_lock);
     move(prev_y, prev_x);
     refresh();
 }
@@ -231,12 +241,15 @@ void* input(void* param) {
                 pos--;
             }
             next[pos] = '\0';
-            erase();
+            backspace(strlen(next));
         } else {
             if (pos < max_line_len) {
                 next[pos++] = c;
             }
+            LOCK(&cursor_lock);
             mvprintw(MAX_Y + 1, MIN_X, "%s", next);
+            SIGNAL(&cursor_flag);
+            UNLOCK(&cursor_lock);
             refresh();
         }
     }
@@ -262,7 +275,10 @@ void* print_words(void* param) {
         } else {
             attron(RED);
         }
+        LOCK(&cursor_lock);
         mvprintw(MIN_Y-1, MIN_X, "Words left: %d ", --printed);
+        SIGNAL(&cursor_flag);
+        UNLOCK(&cursor_lock);
         if (printed > dict_entries/10) {
             attroff(YELLOW);
         } else {
@@ -275,7 +291,11 @@ void* print_words(void* param) {
         if (game_over) {
             return NULL;
         }
+
+        LOCK(&cursor_lock);
         mvprintw(cur_row, MIN_X, dict[i]);
+        SIGNAL(&cursor_flag);
+        UNLOCK(&cursor_lock);
         refresh();
     }
     game_over = 1;
@@ -313,14 +333,20 @@ void* score_tracker(void* param) {
         if (match) {
                 hits++;
                 attron(BLUE);
+                LOCK(&cursor_lock);
                 mvprintw(match_row, MIN_X, next);
                 mvprintw(MIN_Y-1, MAX_XA("Score:XXXXX"), "Score: %d", ++score);
+                SIGNAL(&cursor_flag);
+                UNLOCK(&cursor_lock);
                 attroff(BLUE);
         } else {
                 misses++;
                 attron(RED);
+                LOCK(&cursor_lock);
                 mvprintw(MAX_Y + 1, MAX_XA(next), next);
                 mvprintw(MIN_Y - 1, MAX_XA("Score:XXXXX"), "Score: %d", --score);
+                SIGNAL(&cursor_flag);
+                UNLOCK(&cursor_lock);
                 attroff((RED));
         }
     }
