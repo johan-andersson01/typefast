@@ -22,7 +22,7 @@ COND input_flag         = PTHREAD_COND_INITIALIZER;
 
 int main(int argc, char* argv[]) {
     signal(SIGINT, free_exit);
-    clock_gettime(CLOCK_MONOTONIC, &start); // used by shuffle
+    clock_gettime(CLOCK_MONOTONIC, &start); // used by shuffle_dict
     parse_options(argc, argv);
     init_ncurses();
     next_input = xmalloc((max_line_len+1)*sizeof(char));
@@ -82,6 +82,7 @@ void init_ncurses() {
     init_pair(1, COLOR_WHITE, COLOR_RED);
     init_pair(2, COLOR_WHITE, COLOR_BLUE);
     init_pair(3, COLOR_WHITE, COLOR_YELLOW);
+    init_pair(4, COLOR_YELLOW, -1);
     cbreak();
     noecho();
     curs_set(0);
@@ -222,8 +223,8 @@ void erase_row(int row, char* str, short strlen) {
     }
 }
 
-void backspace(short str_len) {
-    mvdelch(MAX_Y+1,MIN_X+str_len);
+void backspace(int y, int x, short str_len) {
+    mvdelch(y,x+str_len);
     refresh();
 }
 
@@ -246,7 +247,7 @@ void* input(void* param) {
                 pos--;
             }
             next[pos] = '\0';
-            backspace(strlen(next));
+            backspace(MAX_Y + 1, MIN_X, strlen(next));
         } else {
             if (pos < max_line_len) {
                 next[pos++] = c;
@@ -260,6 +261,7 @@ void* input(void* param) {
 
 void* print_words(void* param) {
     size_t printed = dict_entries;
+    short prev_strlen = 20;
     for (size_t i = 0; i < dict_entries; i++) {
         cur_row = i % MAX_Y + 1;
         usleep(speed*100*MS);
@@ -272,25 +274,25 @@ void* print_words(void* param) {
                 }
             }
         }
-        if (printed > dict_entries/10) {
-            attron(YELLOW);
-        } else {
-            attron(RED);
-        }
-        mvprintw(MIN_Y-1, MIN_X, "Words left: %d ", --printed);
-        if (printed > dict_entries/10) {
-            attroff(YELLOW);
-        } else {
-            attron(RED);
-        }
         dict_printed[dict_printed_entries] = xmalloc((1+strlen(dict[i]))*sizeof(char));
         strcpy(dict_printed[dict_printed_entries++], dict[i]);
         UNLOCK(&dict_printed_lock);
         erase_row(cur_row, NULL, 0);
         if (game_over) {
             return NULL;
+        } else {
+            if (printed > dict_entries/10) {
+                attron(YELLOW);
+            } else {
+                attron(RED);
+            }
+            mvprintw(MIN_Y-1, MIN_X, "Words left: %d ", --printed);
+            if (printed > dict_entries/10) {
+                attroff(YELLOW);
+            } else {
+                attron(RED);
+            }
         }
-
         mvprintw(cur_row, MIN_X, dict[i]);
         refresh();
     }

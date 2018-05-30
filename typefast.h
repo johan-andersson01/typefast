@@ -56,8 +56,9 @@
 #define MUT       pthread_mutex_t
 #define COND      pthread_cond_t
 #define RED       (COLOR_PAIR(1))
-#define BLUE     (COLOR_PAIR(2))
+#define BLUE      (COLOR_PAIR(2))
 #define YELLOW    (COLOR_PAIR(3))
+#define YEL_INV   (COLOR_PAIR(4))
 // declarations
 void   init_ncurses();
 void   parse_options(int argc, char* argv[]);
