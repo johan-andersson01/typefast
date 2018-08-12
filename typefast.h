@@ -21,8 +21,9 @@
 #define ACC_MSG  "Accuracy: %.*f"
 #define HIT_MSG  "Hits: %d (%.*f)"
 #define MIS_MSG  "Misses: %d (%.*f)"
+#define WPM_MSG  "Words per minute: %zd"
 #define KEY_MSG  "Press any key twice to exit"
-#define HELP_MSG "Welcome to Type Fast!\n-h : shows list of options\n-s : enables shuffling of the dictionary\n-v <number> : sets the speed, where <number> may range from 0 to 10\n-f <filename> : specifies which dictionary to use. If this option isn't provided, the default 'dictionary.txt' will be chosen\n"
+#define HELP_MSG "Welcome to Type Fast!\n-h : shows list of options\n-s : enables shuffling of the dictionary\n-v <number> : sets the speed, where <number> is the desired speed in WPM\n-f <filename> : specifies which dictionary to use. If this option isn't provided, the default 'dictionary.txt' will be chosen\n"
 // layout constants
 //
 // MIN_X/Y----------MID_X-----------------> MAX_X
@@ -49,7 +50,7 @@
 #define MID_Y       (rows/2)
 #define MIN_Y       (1)
 // macros
-#define MS        (1000)
+#define SEC(x)    (x*1000*1000)
 #define SIGNAL(x) pthread_cond_signal(x)
 #define LOCK(x)   pthread_mutex_lock(x)
 #define UNLOCK(x) pthread_mutex_unlock(x)

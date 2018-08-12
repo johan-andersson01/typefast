@@ -9,6 +9,7 @@ char** dict_printed;
 volatile size_t dict_printed_entries = 0;
 size_t malloced_lines = 0;
 int score = 0;
+unsigned int wpm = 0;
 unsigned int hits = 0;
 unsigned int misses = 0;
 unsigned short speed = 9;
@@ -105,9 +106,11 @@ void free_exit(int sig) {
             missratio = ((float) misses)/dict_printed_entries;
         }
         clear();
+        
         mvprintw(MID_Y,   MID_XA(END_MSG), END_MSG);
         mvprintw(MID_Y+1, MID_XA(TIM_MSG), TIM_MSG, 2, elapsed);
         mvprintw(MID_Y+2, MID_XA(TOT_MSG), TOT_MSG, dict_printed_entries);
+        mvprintw(MID_Y+2, MID_XA(WPM_MSG), WPM_MSG, wpm);
         mvprintw(MID_Y+3, MID_XA(ACC_MSG), ACC_MSG, 2, accuracy);
         mvprintw(MID_Y+4, MID_XA(MIS_MSG), MIS_MSG, misses, 2, missratio);
         mvprintw(MID_Y+5, MID_XA(HIT_MSG), HIT_MSG, hits, 2, hitratio);
@@ -264,7 +267,7 @@ void* print_words(void* param) {
     short prev_strlen = 20;
     for (size_t i = 0; i < dict_entries; i++) {
         cur_row = i % MAX_Y + 1;
-        usleep(speed*100*MS);
+        usleep(SEC(60.0/speed));
         LOCK(&dict_printed_lock);
         if (i > cur_row) {
             for (size_t k = 0; k < i; k++) {
@@ -328,17 +331,23 @@ void* score_tracker(void* param) {
         }
         UNLOCK(&dict_printed_lock);
 
+        clock_gettime(CLOCK_MONOTONIC, &finish);
+        float elapsed = (finish.tv_sec - start.tv_sec);
+
+        wpm = (int) hits/(elapsed/60);
+
+        int x = MAX_XA("WPM: XXX | Score:XXXX");
         if (match) {
                 hits++;
                 attron(BLUE);
                 mvprintw(match_row, MIN_X, next);
-                mvprintw(MIN_Y-1, MAX_XA("Score:XXXXX"), "Score: %d", ++score);
+                mvprintw(MIN_Y-1, x, "WPM: %d | Score: %d", wpm, ++score);
                 attroff(BLUE);
         } else {
                 misses++;
                 attron(RED);
                 mvprintw(MAX_Y + 1, MAX_XA(next), next);
-                mvprintw(MIN_Y - 1, MAX_XA("Score:XXXXX"), "Score: %d", --score);
+                mvprintw(MIN_Y-1, x, "WPM: %d | Score: %d", wpm, --score);
                 attroff((RED));
         }
     }

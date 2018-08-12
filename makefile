@@ -1,2 +1,5 @@
-gcc -g -pthread -lncurses main.c -o typefast
+CC=gcc
+
+typefast: main.c typefast.h
+	$(CC) -g -pthread  main.c -o typefast -lncurses
 
